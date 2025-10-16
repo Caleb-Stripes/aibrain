@@ -1,5 +1,88 @@
-/env
-/anaconda_projects
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+env/
+.venv/
+venv/
+
+# Anaconda projects folder
+anaconda_projects/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Installer logs and environments
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+coverage.xml
+.cache
+pytest_cache/
+
+# Jupyter Notebooks and checkpoints
 .ipynb_checkpoints
-/.vscode
+# Optionally ignore all notebooks outputs, but keep sources:
+# .ipynb
+
+# IDE/editor folders
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# macOS files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Files that might contain secrets or local variables
+.env
+.env.*
+vars.txt
+secrets.json
+config.yaml
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# Model artifacts, large data, and cache
+*.h5
+*.ckpt
+*.pt
+model/
+models/
+data/
+datasets/
+*.npz
+
+# System files
+*.swp
+*~
+Thumbs.db
+
+# Node / frontend (if any)
+node_modules/
+npm-debug.log
+
+# Python egg/distro
+.eggs/
+*.egg
+
+# Optional: ignore compiled C extensions
+*.so
+
+# Project-specific scripts / generated files
 activate.zsh
