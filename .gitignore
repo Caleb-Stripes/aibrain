@@ -86,3 +86,7 @@ npm-debug.log
 
 # Project-specific scripts / generated files
 activate.zsh
+
+# Other sensitive files
+rnn_model.json
+network_state.json
