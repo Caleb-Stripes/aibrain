@@ -2,17 +2,20 @@
 Minimal character-level Vanilla RNN model. Written by Andrej Karpathy (@karpathy)
 BSD License
 """
+import sys
 import numpy as np
 import json
 import os
 
 # data I/O
-data = open('input.txt', 'r').read() # should be simple plain text file
-chars = list(set(data))
-data_size, vocab_size = len(data), len(chars)
+data = open('input.txt', 'r').read()  # should be simple plain text file
+# IMPORTANT: use deterministic ordering of characters to ensure consistent indexing across runs.
+# Using list(set(data)) leads to arbitrary ordering due to Python hash randomization; breaks loaded weights.
+initial_chars = sorted(list(set(data)))
+data_size, vocab_size = len(data), len(initial_chars)
 print('data has %d characters, %d unique.' % (data_size, vocab_size))
-char_to_ix = { ch:i for i,ch in enumerate(chars) }
-ix_to_char = { i:ch for i,ch in enumerate(chars) }
+char_to_ix = {ch: i for i, ch in enumerate(initial_chars)}
+ix_to_char = {i: ch for i, ch in enumerate(initial_chars)}
 
 # hyperparameters
 hidden_size = 100 # size of hidden layer of neurons
@@ -33,6 +36,7 @@ def save_model(filename='rnn_model.json', hprev_state=None):
     'mbh': mbh.tolist(),
     'mby': mby.tolist(),
     'hprev': hprev_state.tolist() if hprev_state is not None else None,
+    'chars': [ix_to_char[i] for i in range(len(ix_to_char))],  # preserve vocabulary ordering
     'n': n,
     'p': p,
     'smooth_loss': smooth_loss,
@@ -40,7 +44,7 @@ def save_model(filename='rnn_model.json', hprev_state=None):
     'vocab_size': vocab_size
   }
   with open(filename, 'w') as f:
-    json.dump(model_params, f)
+    json.dump(model_params, f, indent=4)
   print(f'Model saved to {filename}')
 
 def load_model(filename='rnn_model.json'):
@@ -68,6 +72,7 @@ def load_model(filename='rnn_model.json'):
       np.array(model_params.get('mby', []))
     ) if 'mWxh' in model_params else None,
     'hprev': np.array(model_params['hprev']) if model_params.get('hprev') is not None else None,
+    'chars': model_params.get('chars'),
     'training_state': {
       'n': model_params.get('n', 0),
       'p': model_params.get('p', 0),
@@ -79,8 +84,18 @@ def load_model(filename='rnn_model.json'):
 # Try to load existing model, otherwise initialize randomly
 loaded_data = load_model()
 if loaded_data is not None:
+  # Rebuild vocabulary mappings from saved chars to ensure index consistency.
+  saved_chars = loaded_data.get('chars')
+  if saved_chars is None:
+    # Fallback: use deterministic initial_chars but warn.
+    print('Warning: Saved model missing chars list; using current sorted chars. Index mismatch may occur.')
+    saved_chars = initial_chars
+  char_to_ix = {ch: i for i, ch in enumerate(saved_chars)}
+  ix_to_char = {i: ch for i, ch in enumerate(saved_chars)}
+  # Update vocab_size in case file changed
+  vocab_size = len(saved_chars)
   Wxh, Whh, Why, bh, by = loaded_data['weights']
-  if loaded_data['memory'] is not None:
+  if loaded_data['memory'] is not None and len(loaded_data['memory'][0]) > 0:
     mWxh, mWhh, mWhy, mbh, mby = loaded_data['memory']
   else:
     mWxh, mWhh, mWhy = np.zeros_like(Wxh), np.zeros_like(Whh), np.zeros_like(Why)
@@ -91,18 +106,18 @@ if loaded_data is not None:
   hprev = loaded_data['hprev'] if loaded_data['hprev'] is not None else np.zeros((hidden_size, 1))
   print(f'Using loaded model parameters (iteration {n}, loss {smooth_loss:.2f})')
 else:
-  Wxh = np.random.randn(hidden_size, vocab_size)*0.01 # input to hidden
-  Whh = np.random.randn(hidden_size, hidden_size)*0.01 # hidden to hidden
-  Why = np.random.randn(vocab_size, hidden_size)*0.01 # hidden to output
-  bh = np.zeros((hidden_size, 1)) # hidden bias
-  by = np.zeros((vocab_size, 1)) # output bias
+  Wxh = np.random.randn(hidden_size, vocab_size) * 0.01  # input to hidden
+  Whh = np.random.randn(hidden_size, hidden_size) * 0.01  # hidden to hidden
+  Why = np.random.randn(vocab_size, hidden_size) * 0.01  # hidden to output
+  bh = np.zeros((hidden_size, 1))  # hidden bias
+  by = np.zeros((vocab_size, 1))  # output bias
   mWxh, mWhh, mWhy = np.zeros_like(Wxh), np.zeros_like(Whh), np.zeros_like(Why)
-  mbh, mby = np.zeros_like(bh), np.zeros_like(by) # memory variables for Adagrad
+  mbh, mby = np.zeros_like(bh), np.zeros_like(by)  # memory variables for Adagrad
   n, p = 0, 0
-  smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
+  smooth_loss = -np.log(1.0 / vocab_size) * seq_length  # loss at iteration 0
   hprev = np.zeros((hidden_size, 1))
   print('Using randomly initialized parameters')
-
+  
 def lossFun(inputs, targets, hprev):
   """
   inputs,targets are both list of integers.
@@ -162,17 +177,21 @@ def sample(h, seed_ix, n):
 
 while True:
   # prepare inputs (we're sweeping from left to right in steps seq_length long)
-  if p+seq_length+1 >= len(data) or n == 0: 
-    hprev = np.zeros((hidden_size,1)) # reset RNN memory
-    p = 0 # go from start of data
+  if p + seq_length + 1 >= len(data):
+    p = 0  # wrap to start of data
+    # Do NOT reset hprev here; allow hidden continuity across epochs.
+  if n == 0:
+    hprev = np.zeros((hidden_size, 1))  # only reset at very beginning of training
   inputs = [char_to_ix[ch] for ch in data[p:p+seq_length]]
   targets = [char_to_ix[ch] for ch in data[p+1:p+seq_length+1]]
+  
 
   # sample from the model now and then
   if n % 100 == 0:
     sample_ix = sample(hprev, inputs[0], 200)
     txt = ''.join(ix_to_char[ix] for ix in sample_ix)
     print('----\n %s \n----' % (txt, ))
+
 
   # forward seq_length characters through the net and fetch gradient
   loss, dWxh, dWhh, dWhy, dbh, dby, hprev = lossFun(inputs, targets, hprev)
@@ -192,5 +211,5 @@ while True:
 
   p += seq_length # move data pointer
   n += 1 # iteration counter 
-  
+  # sys.exit(0)
   
